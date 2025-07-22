@@ -117,7 +117,6 @@ def validate(
     result_ctx_ids: List[Tuple[List[object], List[float]]],
     workers_num: int,
     match_type: str,
-    out_file: str,
     use_wandb: bool = False,
     output_recall_at_k: bool = False,
     log: bool = True
@@ -128,10 +127,6 @@ def validate(
 
     top_k_hits = match_stats.top_k_hits
     top_k_hits = [v / len(result_ctx_ids) for v in top_k_hits]
-
-    with open(out_file, "w") as f:
-        for k, recall in enumerate(top_k_hits):
-            f.write(f"{k+1},{recall}\n")
 
     return match_stats.questions_doc_hits if not output_recall_at_k else (match_stats.questions_doc_hits, top_k_hits)
 '''

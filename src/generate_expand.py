@@ -21,7 +21,7 @@ Output:
         temperature=0.8,
         repetition_penalty=1.1,
         max_tokens=100,
-        n=15
+        n=30
     )
 
     output = llm.generate(prompts=prompt, sampling_params=sampling_params)
