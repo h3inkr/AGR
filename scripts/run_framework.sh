@@ -6,6 +6,11 @@ export JVM_PATH=$JAVA_HOME/lib/server/libjvm.so
 export CONDA_PREFIX=/home/user4/.conda/envs/agr
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/server:$LD_LIBRARY_PATH
 
+# Analyze
+CUDA_VISIBLE_DEVICES=1 python src/analyze.py \
+    --data_path data/ARC-C/test.json\
+    --output_path results/${DATASET}/analysis_${DATASET}.jsonl\
+
 # Generate - Expansion
 CUDA_VISIBLE_DEVICES=1 python src/generate_expand.py \
     --analyzed_path results/${DATASET}/analysis_${DATASET}.jsonl \
