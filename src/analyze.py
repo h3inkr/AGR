@@ -49,7 +49,7 @@ Output:[/INST]"""
         max_tokens=150
     )
     output = llm.generate(prompts=prompt, sampling_params=sampling_params)
-    output_text = output[0].outputs[0].text.strip()
+    output_text = output[0].outputs[0].text
     output_text = output_text.replace('\n', ' ').strip()
 
     return output_text

@@ -5,13 +5,15 @@ import glob
 import functools
 from tqdm import tqdm
 import argparse
-from retriever_utils import load_passages, SparseRetriever, validate, save_results_eval
+import sys
+sys.path.append("src")
+from retriever_utils import load_passages, SparseRetriever, validate, save_results_base
 
 def parse_qa_file(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line.strip())
-            yield item["original question"], item["refined"], item["answers"]
+            yield item["question"], item["answers"], item["expanded"]
 
 def get_datasets(qa_file_pattern, dataset_name):
     all_patterns = qa_file_pattern.split(",")
@@ -21,13 +23,13 @@ def get_datasets(qa_file_pattern, dataset_name):
     for qa_file in all_qa_files: 
         dataset = list(parse_qa_file(qa_file))
 
-        questions, refined, question_answers = [], [], []
-        for question, refined_q, answers in dataset:
+        questions, question_answers, expanded_q = [], [], []
+        for question, answers, expanded in dataset:
             questions.append(question)
-            refined.append(refined_q)
             question_answers.append(answers)
+            expanded_q.append(expanded)
 
-        qa_file_dict[dataset_name] = (questions, refined, question_answers)
+        qa_file_dict[dataset_name] = (questions, question_answers, expanded_q)
     
     return qa_file_dict
 
@@ -53,8 +55,8 @@ if __name__ == "__main__":
     passages = load_passages(args.passage)
     retriever = SparseRetriever(args.index_name, args.use_rm3, args.num_threads, args.dedup)
 
-    for idx, (dataset_name, (questions, refined, question_answers)) in enumerate(tqdm(qa_dict.items())):
-        top_ids_and_scores = retriever.get_top_docs(questions=refined, top_docs=args.n_top_docs)
+    for idx, (dataset_name, (questions, question_answers, expanded_q)) in enumerate(tqdm(qa_dict.items())):
+        top_ids_and_scores = retriever.get_top_docs(questions=expanded_q, top_docs=args.n_top_docs)
         question_doc_hits = validate(
             dataset_name,
             passages,
@@ -64,10 +66,9 @@ if __name__ == "__main__":
             "string",
         )
 
-        save_results_eval(
+        save_results_base(
             passages,
-            questions,
-            refined,
+            expanded_q,
             question_answers,
             top_ids_and_scores,
             question_doc_hits,

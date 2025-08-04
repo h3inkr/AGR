@@ -53,6 +53,7 @@ if __name__ == "__main__":
         q = example["original_q"]
         grouped_data[q]["answers"] = example["answers"]
         grouped_data[q]["ctxs"].extend(example["ctxs"])
+        #grouped_data[q]["ctxs"] = example["ctxs"]
     #print(grouped_data)
 
     for query, group in tqdm(grouped_data.items(), desc="Enriched Expanding..."):
@@ -62,12 +63,15 @@ if __name__ == "__main__":
         
         # context 섞기
         shuffled_ctxs = group['ctxs'].copy()
+        #shuffled_ctxs = group['ctxs']
         random.shuffle(shuffled_ctxs)
+        #print(answers)
+        #print(shuffled_ctxs)
 
-        # 상위 10개 문서 선택 및 포맷팅
         ref = "\n".join(
-            [f"Reference context: {ctx['text']}" for ctx in shuffled_ctxs[:10]]
+            [f"Reference context: {ctx['text']}" for ctx in shuffled_ctxs]
         )
+        #print(ref)
 
         enriched = expand_enriched(query, ref, llm)
         #print(enriched)
@@ -81,4 +85,3 @@ if __name__ == "__main__":
                 }
                 json.dump(saved, save_file)
                 save_file.write("\n")
-

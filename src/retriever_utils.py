@@ -38,6 +38,7 @@ def get_datasets(qa_file_pattern):
     return qa_file_dict
 
 def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
+    csv.field_size_limit(sys.maxsize)
     docs = {}
     with open(ctx_file) as tsvfile:
         reader = csv.reader(
@@ -61,7 +62,10 @@ class SparseRetriever(object): # BM25
         num_threads,
         dedup=False
     ):  
-        self.searcher = LuceneSearcher.from_prebuilt_index(index_name)
+        if index_name == "wikipedia-dpr":
+            self.searcher = LuceneSearcher.from_prebuilt_index(index_name) # "wikipedia-dpr"
+        else:
+            self.searcher = LuceneSearcher(index_name) # raco
         # self.searcher = LuceneSearcher(f'{index_name}lucene9-index.cacm')
         self.use_rm3 = use_rm3
         ##### 启用rm3 QE方法
@@ -129,68 +133,7 @@ def validate(
     top_k_hits = [v / len(result_ctx_ids) for v in top_k_hits]
 
     return match_stats.questions_doc_hits if not output_recall_at_k else (match_stats.questions_doc_hits, top_k_hits)
-'''
-def save_results(
-    passages: Dict[object, Tuple[str, str]],
-    original_question: str,
-    questions: List[str],
-    answers: List[List[str]],
-    top_passages_and_scores: List[List[Tuple[List[object], List[float]]]],
-    per_question_hits: List[List[List[bool]]],
-    out_file: str,
-    output_no_text: bool = False,
-):
-    
-    merged_data = []
-    assert len(per_question_hits) == len(questions)
-    
-    for i, q in enumerate(questions):
-        q_answers = answers[i]
-        
-        for idx in range(len(top_passages_and_scores[i])):
-            #results_and_scores = top_passages_and_scores[i]
-            results_and_scores = top_passages_and_scores[i][idx]
-            #hits = per_question_hits[i][idx]
-            hits = per_question_hits[i]
-            docs = [passages[doc_id] for doc_id in results_and_scores[0]]
-            scores = [str(score) for score in results_and_scores[1]]
-            hit_indices = [j+1 for j, is_hit in enumerate(hits) if is_hit]
-            hit_min_rank = hit_indices[0] if len(hit_indices) > 0 else None
-            #ctxs_num = len(hits[idx])
-            ctxs_num = len(hits)
 
-            print(hits)
-            print(original_question)
-            print(q)
-            print(q_answers)
-            print(hit_min_rank)
-            print(hit_indices)
-            print(results_and_scores)
-            print(ctxs_num)
-            d = {
-                "original_question": original_question,
-                "expanded_question": q,
-                "answers": q_answers,
-                "hit_min_rank": hit_min_rank,
-                "all_hits": hit_indices,
-                "ctxs": [
-                    {
-                        "id": results_and_scores[0][c],
-                        "rank": (c + 1),
-                        "title": docs[c][1],
-                        "text": docs[c][0] if not output_no_text else "",
-                        "score": scores[c],
-                        "has_answer": hits[0][c],
-                    }
-                    for c in range(ctxs_num)
-                ],
-            }
-            merged_data.append(d)
-        
-    with open(out_file, "w") as writer:
-        writer.write(json.dumps(merged_data, indent=4) + "\n")
-
-'''
 def save_results(
     passages: Dict[object, Tuple[str, str]],
     original_questions: List[str],
@@ -237,8 +180,55 @@ def save_results(
     if out_file:
         with open(out_file, "w") as writer:
             writer.write(json.dumps(merged_data, indent=4) + "\n")
-'''
-def save_results(
+
+def save_results_eval(
+    passages: Dict[object, Tuple[str, str]],
+    original_questions: List[str],
+    questions: List[str],
+    answers: List[List[str]],
+    top_passages_and_scores: List[Tuple[List[object], List[float]]],
+    per_question_hits: List[List[bool]],
+    out_file: str,
+    output_no_text: bool = False,
+):
+    # join passages text with the result ids, their questions and assigning has|no answer labels
+    merged_data = []
+    assert len(per_question_hits) == len(questions) == len(answers)
+    for i, q in enumerate(questions):
+        q_answers = answers[i]
+        results_and_scores = top_passages_and_scores[i]
+        hits = per_question_hits[i]
+        docs = [passages[doc_id] for doc_id in results_and_scores[0]]
+        scores = [str(score) for score in results_and_scores[1]]
+        hit_indices = [j+1 for j, is_hit in enumerate(hits) if is_hit]
+        hit_min_rank = hit_indices[0] if len(hit_indices) > 0 else None
+        ctxs_num = len(hits)
+
+        d = {   
+                "original_q": original_questions[i],
+                "enriched_ex": q,
+                "answers": q_answers,
+                "hit_min_rank": hit_min_rank,
+                "all_hits": hit_indices,
+                "ctxs": [
+                    {
+                        "id": results_and_scores[0][c],
+                        "rank": (c + 1),
+                        "title": docs[c][1],
+                        "text": docs[c][0] if not output_no_text else "",
+                        "score": scores[c],
+                        "has_answer": hits[c],
+                    }
+                    for c in range(ctxs_num)
+                ],
+            }
+        merged_data.append(d)
+
+    if out_file:
+        with open(out_file, "w") as writer:
+            writer.write(json.dumps(merged_data, indent=4) + "\n")
+
+def save_results_base(
     passages: Dict[object, Tuple[str, str]],
     questions: List[str],
     answers: List[List[str]],
@@ -260,7 +250,7 @@ def save_results(
         hit_min_rank = hit_indices[0] if len(hit_indices) > 0 else None
         ctxs_num = len(hits)
 
-        d = {
+        d = {   
                 "question": q,
                 "answers": q_answers,
                 "hit_min_rank": hit_min_rank,
@@ -279,6 +269,6 @@ def save_results(
             }
         merged_data.append(d)
 
-    with open(out_file, "w") as writer:
-        writer.write(json.dumps(merged_data, indent=4) + "\n")
-'''
+    if out_file:
+        with open(out_file, "w") as writer:
+            writer.write(json.dumps(merged_data, indent=4) + "\n")

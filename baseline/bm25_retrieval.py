@@ -5,13 +5,33 @@ import glob
 import functools
 from tqdm import tqdm
 import argparse
-from retriever_utils import load_passages, SparseRetriever, validate, save_results_eval
+import sys
+sys.path.append("src")
+from retriever_utils import load_passages, SparseRetriever, validate, save_results_base
 
 def parse_qa_file(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            item = json.loads(line.strip())
-            yield item["original question"], item["refined"], item["answers"]
+        data = json.load(f)  # 전체 JSON 배열을 로드
+        for item in data:
+            yield item["question"], item["answers"]
+
+def parse_qa_file_mcq(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)  # JSON 배열 로드
+        for item in data:
+            question = item["question"]
+            
+            # label과 text 매핑 생성
+            label_to_text = dict(zip(item["choices"]["label"], item["choices"]["text"]))
+            
+            # 정답 레이블 리스트
+            answer_labels = item["answers"]
+            
+            # 각 정답 레이블을 실제 텍스트로 변환
+            answer_texts = [label_to_text[label] for label in answer_labels]
+            #print(answer_texts)
+
+            yield question, answer_texts
 
 def get_datasets(qa_file_pattern, dataset_name):
     all_patterns = qa_file_pattern.split(",")
@@ -19,15 +39,18 @@ def get_datasets(qa_file_pattern, dataset_name):
 
     qa_file_dict = {}
     for qa_file in all_qa_files: 
-        dataset = list(parse_qa_file(qa_file))
+        dataset = list(parse_qa_file_mcq(qa_file))
+        #if dataset_name == 'nq' or '2wiki':
+        #    dataset = list(parse_qa_file(qa_file))
+        #elif dataset_name == 'csqa':
+        #    dataset = list(parse_qa_file_mcq(qa_file))
 
-        questions, refined, question_answers = [], [], []
-        for question, refined_q, answers in dataset:
+        questions, question_answers = [], []
+        for question, answers in dataset:
             questions.append(question)
-            refined.append(refined_q)
             question_answers.append(answers)
 
-        qa_file_dict[dataset_name] = (questions, refined, question_answers)
+        qa_file_dict[dataset_name] = (questions, question_answers)
     
     return qa_file_dict
 
@@ -48,13 +71,14 @@ def parse_argument():
 if __name__ == "__main__":
     args = parse_argument()
     ### retrieval 100개씩
+    #print(args.dataset_name)
 
     qa_dict = get_datasets(args.qa_path, args.dataset_name)
     passages = load_passages(args.passage)
     retriever = SparseRetriever(args.index_name, args.use_rm3, args.num_threads, args.dedup)
 
-    for idx, (dataset_name, (questions, refined, question_answers)) in enumerate(tqdm(qa_dict.items())):
-        top_ids_and_scores = retriever.get_top_docs(questions=refined, top_docs=args.n_top_docs)
+    for idx, (dataset_name, (questions, question_answers)) in enumerate(tqdm(qa_dict.items())):
+        top_ids_and_scores = retriever.get_top_docs(questions=questions, top_docs=args.n_top_docs)
         question_doc_hits = validate(
             dataset_name,
             passages,
@@ -64,10 +88,9 @@ if __name__ == "__main__":
             "string",
         )
 
-        save_results_eval(
+        save_results_base(
             passages,
             questions,
-            refined,
             question_answers,
             top_ids_and_scores,
             question_doc_hits,
